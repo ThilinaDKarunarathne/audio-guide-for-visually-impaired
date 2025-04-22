@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Assistant</title>
+</head>
+
+<body>
+    <h1>Vision-Based Navigation Assistant</h1>
+    <button onclick="startCamera()">Start Navigation</button>
+    <video id="video" width="640" height="480" autoplay></video>
+    <div>
+        <h2>Processed Frame:</h2>
+        <img id="processed-frame" width="640" height="480" alt="Processed frame will appear here">
+    </div>
+    <div id="status"></div>
+
+    <script>
+        let videoElement = document.getElementById('video');
+        let processedFrameElement = document.getElementById('processed-frame');
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let stream;
+        let isProcessing = false; // To prevent overlapping frame processes
+        let lastCommand = ""; // Store the last spoken command
+
+        function speakCommand(text) {
+            if (text !== lastCommand) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                window.speechSynthesis.cancel(); // Cancel any ongoing speech
+                window.speechSynthesis.speak(utterance);
+                lastCommand = text; // Update the last command
+            }
+        }
+
+        function startCamera() {
+            const constraints = {
+                video: {
+                    facingMode: { exact: "environment" } // Use back camera
+                }
+            };
+
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia(constraints)
+                    .then(function (mediaStream) {
+                        stream = mediaStream;
+                        videoElement.srcObject = mediaStream;
+                        startSending(); // Start sending frames once the camera starts
+                    })
+                    .catch(function (err) {
+                        console.warn("Back camera not available. Falling back to front camera.", err);
+                        // Fallback to front camera
+                        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                            .then(function (mediaStream) {
+                                stream = mediaStream;
+                                videoElement.srcObject = mediaStream;
+                                startSending();
+                            })
+                            .catch(function (err) {
+                                console.error("Error accessing the camera: " + err);
+                                alert("Camera error: " + err);
+                            });
+                    });
+            } else {
+                alert("getUserMedia not supported in this browser.");
+            }
+        }
+
+        async function processFrame() {
+            if (isProcessing) return; // Skip if a frame is already being processed
+            isProcessing = true;
+
+            try {
+                // Capture the current frame to a canvas
+                canvas.width = 640;
+                canvas.height = 480;
+                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                // Convert canvas to a Blob
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7)); // 70% quality
+
+                // Send the frame to the server
+                const formData = new FormData();
+                formData.append("image", blob, "frame.jpg");
+
+                const response = await fetch('https://01ad-2402-4000-20c3-2d11-61cd-6a82-9813-544d.ngrok-free.app/upload_frame', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // Update the UI with the server's response
+                    if (data.command) {
+                        document.getElementById("status").innerText = "Command: " + data.command;
+                        speakCommand(data.command); // Speak only if the command is new
+                    }
+
+                    if (data.processed_frame) {
+                        // Update the processed frame image
+                        processedFrameElement.src = `data:image/jpeg;base64,${data.processed_frame}`;
+                    }
+                } else {
+                    console.error("Error: Server returned status", response.status);
+                }
+
+            } catch (error) {
+                console.error("Error processing frame:", error);
+            } finally {
+                isProcessing = false; // Reset the flag when done
+            }
+        }
+
+        function startSending() {
+            setInterval(() => {
+                processFrame(); // Process each frame asynchronously
+            }, 1000); // Send a frame every 1000ms
+        }
+    </script>
+</body>
+
+</html>
