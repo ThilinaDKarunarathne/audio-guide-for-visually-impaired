@@ -11,6 +11,10 @@ from segformer_module import async_process_frame  # Ensure this file exists and 
 app = Flask(__name__, static_folder='static')
 CORS(app)  # Enable CORS for all routes
 
+# Global variables to handle frame processing efficiently
+latest_frame = None
+processing_task = None
+
 @app.route('/')
 def serve_client():
     # Serve the client.html file from the static folder
@@ -18,6 +22,8 @@ def serve_client():
 
 @app.route('/upload_frame', methods=['POST'])
 async def upload_frame():
+    global latest_frame, processing_task
+
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided'}), 400
 
@@ -26,17 +32,39 @@ async def upload_frame():
     image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     frame = np.array(image)
 
-    # Call the asynchronous SegFormer logic and get command and processed frame
-    command, processed_frame = await async_process_frame(frame)  # Updated to use async function
+    # Update the latest frame
+    latest_frame = frame
+
+    # If there is an ongoing processing task, cancel it
+    if processing_task and not processing_task.done():
+        processing_task.cancel()
+
+    # Start a new processing task
+    processing_task = asyncio.create_task(process_frame())
+
+    # Wait for the processing to complete
+    try:
+        result = await processing_task
+        return jsonify(result)
+    except asyncio.CancelledError:
+        return jsonify({'status': 'Processing was canceled for a newer frame'}), 202
+
+async def process_frame():
+    global latest_frame
+
+    # Process the latest frame
+    current_frame = latest_frame
+    latest_frame = None  # Mark as consumed
+    command, processed_frame = await async_process_frame(current_frame)
 
     # Encode processed frame as base64
-    _, buffer = cv2.imencode('.jpg', processed_frame)
+    _, buffer = cv2.imencode('.jpeg', processed_frame)
     processed_frame_base64 = base64.b64encode(buffer).decode('utf-8')
 
-    return jsonify({
+    return {
         'command': command,
         'processed_frame': processed_frame_base64
-    })
+    }
 
 if __name__ == '__main__':
     # Run the Flask app

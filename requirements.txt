@@ -1,7 +1,0 @@
-flask
-torch
-transformers
-opencv-python
-numpy
-Pillow
-pyttsx3

@@ -2,16 +2,16 @@ import torch
 from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
 
 # Load the SegFormer-B0 model from Hugging Face Transformers
-model_name = "nvidia/segformer-b0-finetuned-cityscapes-1024-1024"
+model_name = "nvidia/segformer-b0-finetuned-cityscapes-768-768"
 feature_extractor = SegformerImageProcessor.from_pretrained(model_name)
 model = SegformerForSemanticSegmentation.from_pretrained(model_name)
 model.eval()  # Set the model to evaluation mode
 
 # Create a dummy input tensor matching the input size (Batch x Channels x Height x Width)
-dummy_input = torch.randn(1, 3, 640, 480)  # 1 batch, 3 RGB channels, 640x480 resolution
+dummy_input = torch.randn(1, 3, 768, 768)  # 1 batch, 3 RGB channels, 640x480 resolution
 
 # Export the model to ONNX
-onnx_model_path = "segformer_b0_cityscapes.onnx"
+onnx_model_path = "segformer_b0_finetuned_cityscapes_768_768.onnx"
 torch.onnx.export(
     model,
     dummy_input,
