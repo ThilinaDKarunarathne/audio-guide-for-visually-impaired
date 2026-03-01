@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ```
 
 ## Step 3: Run `convert_to_onnx`
-Execute the script to convert the model to ONNX format:
+Execute the script to download models and convert the model to ONNX format:
 
 ```bash
 python convert_to_onnx.py
